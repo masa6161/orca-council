@@ -55,6 +55,7 @@ function doctor() {
   }
   const m = engineModels()
   log(`  models: claude=${m.claude} codex=${m.codex} agy=${m.agy} chair=${m.chair}`)
+  log(`  effort: claude=${m.effort.claude} codex=${m.effort.codex} agy=${m.effort.agy || 'model default'} chair=${m.effort.chair}`)
   log(`  councils folder: ${defaultRoot()} (the project's .council folder, or COUNCIL_ROOT)`)
   log(found === 3 ? 'Ready.' : found ? `Ready with ${found} of 3 members (missing ones are skipped and the verdict says so).` : 'No member CLI found: install at least one, plus claude for the chair.')
   process.exit(found ? 0 : 1)

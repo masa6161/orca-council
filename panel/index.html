@@ -43,6 +43,34 @@
     <p id="clis" class="clis"></p>
   </form>
 
+  <details id="models" class="box more models">
+    <summary>Model settings</summary>
+    <form id="model-form" autocomplete="off">
+      <fieldset id="model-fields" aria-label="Council models" disabled>
+        <label class="lbl" for="model-claude">Claude participant</label>
+        <input id="model-claude" class="field" spellcheck="false">
+        <label class="lbl" for="effort-claude">Claude participant effort</label>
+        <select id="effort-claude" class="field"></select>
+        <label class="lbl" for="model-codex">Codex participant</label>
+        <input id="model-codex" class="field" spellcheck="false">
+        <label class="lbl" for="effort-codex">Codex participant effort</label>
+        <select id="effort-codex" class="field"></select>
+        <label class="lbl" for="model-agy">Antigravity participant</label>
+        <input id="model-agy" class="field" spellcheck="false">
+        <label class="lbl" for="effort-agy">Antigravity participant effort</label>
+        <select id="effort-agy" class="field"></select>
+        <label class="lbl" for="model-chair">Claude chair</label>
+        <input id="model-chair" class="field" spellcheck="false">
+        <label class="lbl" for="effort-chair">Claude chair effort</label>
+        <select id="effort-chair" class="field"></select>
+        <p class="note">Leave a field blank to use its default. A blank chair follows the Claude participant. Choose an effort supported by the model. Model environment overrides take precedence.</p>
+        <p id="model-overrides" class="note warn" hidden></p>
+        <button class="btn" type="submit">Save models</button>
+      </fieldset>
+      <p id="models-status" class="status" role="status"></p>
+    </form>
+  </details>
+
   <section class="past" aria-labelledby="past-h">
     <h2 id="past-h">Past councils <span id="past-n" class="mute num"></span></h2>
     <ol id="past" class="rows"></ol>

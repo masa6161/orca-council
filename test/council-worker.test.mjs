@@ -6,6 +6,7 @@ import os from 'node:os'
 import path from 'node:path'
 import activate from '../worker.mjs'
 import { readText, readJson, pidAlive } from '../lib/readers.mjs'
+import { engineModels } from '../runner/engines.mjs'
 
 function fixture(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'council-worker-'))
@@ -52,7 +53,7 @@ test('the tab view and full-answer requests never touch the host API or storage'
     } })
   }
   activate(orca)
-  assert.deepEqual([...handlers.keys()].sort(), ['council.answer', 'council.ask', 'council.history', 'council.open', 'council.view', 'council.workspaces'])
+  assert.deepEqual([...handlers.keys()].sort(), ['council.answer', 'council.ask', 'council.history', 'council.models', 'council.models.save', 'council.open', 'council.view', 'council.workspaces'])
 
   const doc = JSON.stringify({ schema: 1, kind: 'blind-panel', dir })
   const view = await handlers.get('council.view')({ doc })
@@ -66,4 +67,33 @@ test('the tab view and full-answer requests never touch the host API or storage'
   assert.equal((await handlers.get('council.view')({ doc: 'invalid' })).ok, false)
   assert.equal((await handlers.get('council.answer')({ doc: 'invalid', who: 'claude' })).ok, false)
   assert.deepEqual(hostAccess, [])
+})
+
+test('panel saves model preferences for the runner and can restore the chair fallback', async (t) => {
+  const { dir } = fixture(t)
+  const env = { APPDATA: dir, HOME: dir, COUNCIL_CODEX_MODEL: 'codex-env' }
+  const handlers = new Map()
+  activate({ panels: { handle: (name, fn) => handlers.set(name, fn) } }, { env })
+  const load = handlers.get('council.models')
+  const save = handlers.get('council.models.save')
+
+  assert.deepEqual((await load()).config, {})
+  const config = {
+    claude: 'member-model', chair: 'chair-model', codex: 'codex-file',
+    effort: { chair: 'xhigh' }
+  }
+  const saved = await save({ config })
+  assert.deepEqual(await load(), saved)
+  assert.equal(saved.effective.codex, 'codex-env')
+  assert.equal(engineModels(env).chair, 'chair-model')
+  assert.equal(engineModels(env).effort.chair, 'xhigh')
+  assert.ok(saved.effortLevels.codex.includes('ultra'))
+  await assert.rejects(save({ config: { effort: { chair: 'ultra' } } }), /Invalid reasoning effort for chair/)
+  await assert.rejects(save({ config: { chair: false } }), /non-empty model IDs/)
+  await assert.rejects(save({ config: { path: 'outside.json' } }), /non-empty model IDs/)
+  assert.deepEqual((await load()).config, config)
+
+  await save({ config: { claude: 'member-model' } })
+  assert.equal(engineModels(env).chair, 'member-model')
+  assert.equal(engineModels(env).effort.chair, 'high')
 })

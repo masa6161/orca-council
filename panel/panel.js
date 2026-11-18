@@ -29,6 +29,68 @@
   function errText(e) { return (e && (e.message || e.code)) || String(e) }
   function setStatus(text, cls) { var s = $('status'); s.textContent = text || ''; s.className = 'status' + (cls ? ' ' + cls : '') }
 
+  // ---------------------------------------------------------------- model settings
+  var modelKeys = ['claude', 'codex', 'agy', 'chair']
+  var modelNames = { claude: 'Claude', codex: 'Codex', agy: 'Antigravity', chair: 'Chair' }
+  var modelBusy = false
+  function modelStatus(text, cls) {
+    var status = $('models-status')
+    status.textContent = text
+    status.className = 'status' + (cls ? ' ' + cls : '')
+  }
+  function renderModels(r) {
+    modelKeys.forEach(function (key) {
+      var field = $('model-' + key)
+      field.value = r.config[key] || ''
+      field.placeholder = r.effective[key] || ''
+      var effort = $('effort-' + key)
+      var defaultEffort = key === 'agy' ? 'Model default' : 'Default (high)'
+      effort.innerHTML = '<option value="">' + defaultEffort + '</option>' +
+        r.effortLevels[key].map(function (level) {
+          return '<option value="' + esc(level) + '">' + esc(level) + '</option>'
+        }).join('')
+      effort.value = (r.config.effort || {})[key] || ''
+    })
+    var overrides = modelKeys.filter(function (key) {
+      return r.config[key] && r.config[key] !== r.effective[key]
+    }).map(function (key) { return modelNames[key] + ' uses ' + r.effective[key] })
+    $('model-overrides').textContent = overrides.join(' · ')
+    $('model-overrides').hidden = !overrides.length
+    $('model-fields').disabled = false
+  }
+  $('models').addEventListener('toggle', function () {
+    if (!this.open || modelBusy) return
+    modelBusy = true
+    $('model-fields').disabled = true
+    modelStatus('Loading…')
+    request('council.models').then(function (r) {
+      renderModels(r)
+      modelStatus('')
+    }, function (e) { modelStatus(errText(e), 's-risk') }).then(function () { modelBusy = false })
+  })
+  $('model-form').addEventListener('submit', function (ev) {
+    ev.preventDefault()
+    if (modelBusy || $('model-fields').disabled) return
+    var config = {}, effort = {}
+    modelKeys.forEach(function (key) {
+      var model = $('model-' + key).value.trim()
+      var level = $('effort-' + key).value
+      if (model) config[key] = model
+      if (level) effort[key] = level
+    })
+    if (Object.keys(effort).length) config.effort = effort
+    $('model-fields').disabled = true
+    modelBusy = true
+    modelStatus('Saving…')
+    request('council.models.save', { config: config }).then(function (r) {
+      renderModels(r)
+      modelStatus('Saved for the next council.', 's-ok')
+    }, function (e) {
+      $('model-fields').disabled = false
+      modelStatus(errText(e), 's-risk')
+    }).then(function () { modelBusy = false })
+  })
+
   // ---------------------------------------------------------------- workspaces
   function label(w) { return w.repo === w.name ? w.name : w.repo + ' · ' + w.name }
   function loadWorkspaces(keepPick) {

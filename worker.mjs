@@ -7,7 +7,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { readCouncilView, readCouncilAnswer, parseViewDoc } from './lib/council-view.mjs'
 import { listWorkspaces, ask, history, openCouncil } from './lib/ask.mjs'
-import { MEMBER_ENGINES, resolveEngine, findNode } from './runner/engines.mjs'
+import { EFFORT_LEVELS, MEMBER_ENGINES, resolveEngine, findNode, engineModels, readModelConfig, saveModelConfig } from './runner/engines.mjs'
 
 // The folder that holds the councils folder. Only used when a .view file names a council folder that has moved:
 // the worker then looks for the same folder name under <root>/councils. Councils normally live in the workspace's
@@ -27,7 +27,15 @@ function viewRef(input) {
   return parseViewDoc(input && typeof input.doc === 'string' ? input.doc.slice(0, 64 * 1024) : '')
 }
 
-export default function activate(orca) {
+export default function activate(orca, { env = process.env } = {}) {
+  orca.panels.handle('council.models', async () => {
+    const config = readModelConfig(env)
+    return { config, effective: engineModels(env, config), effortLevels: EFFORT_LEVELS }
+  })
+  orca.panels.handle('council.models.save', async ({ config } = {}) => {
+    saveModelConfig(config, env)
+    return { config, effective: engineModels(env, config), effortLevels: EFFORT_LEVELS }
+  })
   orca.panels.handle('council.view', async (input) => {
     const ref = viewRef(input)
     if (ref.error) return { ok: false, error: ref.error, now: Date.now() }

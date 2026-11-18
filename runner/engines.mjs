@@ -16,30 +16,69 @@ export const FAKE_ENGINE = path.join(HERE, 'fake-engine.mjs')
 export const WIN = process.platform === 'win32'
 export const MEMBER_ENGINES = ['claude', 'codex', 'agy']
 
+const STANDARD_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max']
+export const EFFORT_LEVELS = {
+  claude: STANDARD_EFFORTS,
+  codex: ['none', 'minimal', ...STANDARD_EFFORTS, 'ultra'],
+  agy: STANDARD_EFFORTS,
+  chair: STANDARD_EFFORTS
+}
+const DEFAULT_EFFORT = { claude: 'high', codex: 'high', chair: 'high' }
+
 export const DEFAULT_MODELS = { claude: 'opus', codex: 'gpt-6.1-sol', agy: 'gemini-4-argon-high' }
 
-export function engineModels(env = process.env) {
-  const file = WIN && env.APPDATA
+function modelConfigPath(env) {
+  return WIN && env.APPDATA
     ? path.join(env.APPDATA, 'orca-council', 'models.json')
     : path.join(env.HOME || os.homedir(), '.council', 'models.json')
-  let config = {}
-  try {
-    config = JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''))
-    if (!config || typeof config !== 'object' || Array.isArray(config) ||
-        Object.keys(config).some(key => key !== 'chair' && !MEMBER_ENGINES.includes(key)) ||
-        Object.values(config).some(model => typeof model !== 'string' || !model.trim())) {
-      throw new Error('expected non-empty model IDs under claude, codex, agy or chair')
-    }
-  } catch (error) {
-    if (error.code !== 'ENOENT') throw new Error(`Invalid model configuration (${file}): ${error.message}`)
-  }
+}
 
+function validateModelConfig(config) {
+  if (!config || typeof config !== 'object' || Array.isArray(config) ||
+      Object.entries(config).some(([key, model]) => key !== 'effort' &&
+        (!Object.hasOwn(EFFORT_LEVELS, key) || typeof model !== 'string' || !model.trim()))) {
+    throw new Error('Expected non-empty model IDs under claude, codex, agy or chair')
+  }
+  if (Object.hasOwn(config, 'effort')) {
+    const effort = config.effort
+    if (!effort || typeof effort !== 'object' || Array.isArray(effort)) {
+      throw new Error('Expected an effort object with a reasoning level per role')
+    }
+    for (const [role, level] of Object.entries(effort)) {
+      if (!Object.hasOwn(EFFORT_LEVELS, role) || !EFFORT_LEVELS[role].includes(level)) {
+        throw new Error(`Invalid reasoning effort for ${role}`)
+      }
+    }
+  }
+}
+
+export function readModelConfig(env = process.env) {
+  const file = modelConfigPath(env)
+  try {
+    const config = JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''))
+    validateModelConfig(config)
+    return config
+  } catch (error) {
+    if (error.code === 'ENOENT') return {}
+    throw new Error(`Invalid model configuration (${file}): ${error.message}`)
+  }
+}
+
+export function saveModelConfig(config, env = process.env) {
+  validateModelConfig(config)
+  const file = modelConfigPath(env)
+  fs.mkdirSync(path.dirname(file), { recursive: true })
+  if (!writeJsonAtomic(file, config)) throw new Error(`Could not save model configuration (${file})`)
+}
+
+export function engineModels(env = process.env, config = readModelConfig(env)) {
   const claude = env.COUNCIL_CLAUDE_MODEL || config.claude || DEFAULT_MODELS.claude
   return {
     claude,
     codex: env.COUNCIL_CODEX_MODEL || config.codex || DEFAULT_MODELS.codex,
     agy: env.COUNCIL_AGY_MODEL || config.agy || DEFAULT_MODELS.agy,
-    chair: env.COUNCIL_CHAIR_MODEL || config.chair || claude
+    chair: env.COUNCIL_CHAIR_MODEL || config.chair || claude,
+    effort: { ...DEFAULT_EFFORT, ...config.effort }
   }
 }
 
@@ -125,8 +164,8 @@ const CLAUDE_HOST_ENV = ['CLAUDECODE', 'CLAUDE_CODE_CHILD_SESSION', 'CLAUDE_CODE
 const CLAUDE_STREAM = ['--output-format', 'stream-json', '--verbose', '--include-partial-messages']
 // Read-only member: only Read/Grep/Glob exist, nothing prompts, --restricted ignores user/project settings (no
 // allow rules or hooks widen it) and confines the file tools to the working dir, no MCP servers, no session file.
-function claudeReadOnly(model) {
-  return ['-p', '--model', model, '--effort', 'high', '--tools', 'Read,Grep,Glob', '--allowedTools', 'Read,Grep,Glob',
+function claudeReadOnly(model, effort) {
+  return ['-p', '--model', model, '--effort', effort, '--tools', 'Read,Grep,Glob', '--allowedTools', 'Read,Grep,Glob',
     '--permission-mode', 'dontAsk', '--permission-prompts', 'none', '--restricted', '--strict-mcp-config', '--no-session-persistence']
 }
 // The chair has no tools. A text-only role instead of the coding-agent system prompt: without it a chair once
@@ -144,7 +183,7 @@ export function memberSpec(o) {
   const models = o.models || engineModels()
   const base = { name: engine, logDir, answerFile, timeoutSec, outFile: path.join(logDir, `${engine}.out.txt`), errFile: path.join(logDir, `${engine}.err.txt`) }
   if (engine === 'claude') {
-    const r = dryRun ? fake('claude') : (() => { const e = resolveEngine('claude', o.env); return { exe: e.exe, args: [...claudeReadOnly(models.claude), ...CLAUDE_STREAM] } })()
+    const r = dryRun ? fake('claude') : (() => { const e = resolveEngine('claude', o.env); return { exe: e.exe, args: [...claudeReadOnly(models.claude, models.effort.claude), ...CLAUDE_STREAM] } })()
     return { ...base, ...r, stdin: prompt, cwd: projectDir, removeEnv: CLAUDE_HOST_ENV, kind: 'claudestream' }
   }
   if (engine === 'codex') {
@@ -158,7 +197,7 @@ export function memberSpec(o) {
       // Native Windows needs a sandbox implementation picked, and --ignore-user-config drops config.toml.
       const winSandbox = WIN ? ['-c', 'windows.sandbox=mxc'] : []
       r = { exe: e.exe, args: [...e.prefix, 'exec', '--skip-git-repo-check', '-s', 'read-only', '-C', projectDir, ...winSandbox,
-        '-m', models.codex, '-c', 'model_reasoning_effort=high', '--ignore-user-config', '--ephemeral', '--color', 'never', '-o', last, '--json', '-'] }
+        '-m', models.codex, '-c', `model_reasoning_effort=${models.effort.codex}`, '--ignore-user-config', '--ephemeral', '--color', 'never', '-o', last, '--json', '-'] }
     }
     return { ...base, ...r, stdin: prompt, cwd: projectDir, kind: 'codex', codexLastFile: last }
   }
@@ -168,8 +207,9 @@ export function memberSpec(o) {
     const ws = path.join(logDir, 'agy-ws')
     fs.mkdirSync(ws, { recursive: true })
     const printSec = Math.max(30, Math.floor(timeoutSec - 20))
+    const effortArgs = models.effort.agy ? ['--effort', models.effort.agy] : []
     const r = dryRun ? fake('agy', ['--prompt', prompt])
-      : { exe: resolveEngine('agy', o.env).exe, args: ['-p', AGY_NOTE + prompt, '--mode', 'plan', '--sandbox', '--model', models.agy, '--output-format', 'stream-json', '--print-timeout', `${printSec}s`] }
+      : { exe: resolveEngine('agy', o.env).exe, args: ['-p', AGY_NOTE + prompt, '--mode', 'plan', '--sandbox', '--model', models.agy, ...effortArgs, '--output-format', 'stream-json', '--print-timeout', `${printSec}s`] }
     return { ...base, ...r, stdin: '', cwd: ws, kind: 'agystream' }
   }
   throw new Error(`unknown engine ${engine}`)
@@ -181,7 +221,7 @@ export function chairSpec(o) {
   const models = o.models || engineModels()
   const r = dryRun ? fake('chair') : {
     exe: resolveEngine('claude', o.env).exe,
-    args: ['-p', '--model', models.chair, '--effort', 'high', '--tools', '', '--system-prompt', CHAIR_SYSTEM_PROMPT,
+    args: ['-p', '--model', models.chair, '--effort', models.effort.chair, '--tools', '', '--system-prompt', CHAIR_SYSTEM_PROMPT,
       '--permission-mode', 'dontAsk', '--permission-prompts', 'none', '--restricted', '--strict-mcp-config', '--no-session-persistence', ...CLAUDE_STREAM]
   }
   return { name: 'chair', ...r, stdin: prompt, cwd: emptyDir, logDir, answerFile, timeoutSec, removeEnv: CLAUDE_HOST_ENV, kind: 'claudestream',

@@ -76,16 +76,17 @@ node runner/council.mjs <decision|deliverable|facts> ("question" | --brief brief
 
 ### Model configuration
 
-Create `%APPDATA%\orca-council\models.json` on Windows or `~/.council/models.json` on macOS and Linux. The panel and CLI both use this file. For example, keep Opus as the Claude member and use Sonnet as the chair.
+In the Council sidebar, open **Model settings**, edit the model IDs and reasoning efforts, then select **Save models**. Leave a field blank to fall back to its default or, for the chair, to the Claude member. The panel saves to `%APPDATA%\orca-council\models.json` on Windows or `~/.council/models.json` on macOS and Linux. You can also edit that file directly. The panel and CLI both use it. For example, keep Opus as the Claude member and use Sonnet as the chair.
 
 ```json
 {
   "claude": "opus",
-  "chair": "sonnet"
+  "chair": "sonnet",
+  "effort": { "claude": "medium", "codex": "xhigh", "chair": "high" }
 }
 ```
 
-All keys are optional. The supported keys are `claude`, `codex`, `agy` and `chair`. Use model IDs accepted by the corresponding CLI.
+All keys are optional. The model keys and the keys inside `effort` are `claude`, `codex`, `agy` and `chair`. Claude, Codex and the chair default to `high`. Antigravity keeps the selected model’s default unless an effort is set. Available levels depend on the model and CLI version.
 
 For each member, `COUNCIL_CLAUDE_MODEL`, `COUNCIL_CODEX_MODEL` and `COUNCIL_AGY_MODEL` take precedence over the file. Unset member models default to `opus`, `gpt-6.1-sol` and `gemini-4-argon-high`. The chair uses `COUNCIL_CHAIR_MODEL`, then the file's `chair`, then the resolved Claude member model. Run `node runner/council.mjs doctor` to see the resolved models.
 

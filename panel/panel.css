@@ -47,6 +47,12 @@ select.field { height: 32px; padding: 0 8px; }
 .clis { display: flex; flex-wrap: wrap; gap: 10px; font-size: var(--on-fs-meta); color: var(--on-faint); margin: 0; }
 .clis span { display: inline-flex; align-items: center; gap: 5px; }
 
+.models { margin-top: 12px; }
+.models fieldset { border: 0; padding: 0; margin: 0; min-width: 0; display: grid; gap: 8px; }
+.models .field { margin: -4px 0 0; }
+.models .btn { justify-self: start; }
+.models .status:not(:empty) { margin-top: 8px; }
+
 .past { margin-top: 22px; }
 .past h2 { font-size: var(--on-fs-label); font-weight: var(--on-fw-semi); margin: 0 0 6px; }
 .rows { list-style: none; margin: 0 0 8px; padding: 0; }
