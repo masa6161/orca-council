@@ -74,7 +74,20 @@ node runner/council.mjs <decision|deliverable|facts> ("question" | --brief brief
   --no-open          do not open the tab in Orca
 ```
 
-Models default to `opus`, `gpt-6.1-sol` and `gemini-4-argon-high`. Change them with `COUNCIL_CLAUDE_MODEL`, `COUNCIL_CODEX_MODEL` and `COUNCIL_AGY_MODEL`, using any model id your CLI accepts.
+### Model configuration
+
+Create `%APPDATA%\orca-council\models.json` on Windows or `~/.council/models.json` on macOS and Linux. The panel and CLI both use this file. For example, keep Opus as the Claude member and use Sonnet as the chair.
+
+```json
+{
+  "claude": "opus",
+  "chair": "sonnet"
+}
+```
+
+All keys are optional. The supported keys are `claude`, `codex`, `agy` and `chair`. Use model IDs accepted by the corresponding CLI.
+
+For each member, `COUNCIL_CLAUDE_MODEL`, `COUNCIL_CODEX_MODEL` and `COUNCIL_AGY_MODEL` take precedence over the file. Unset member models default to `opus`, `gpt-6.1-sol` and `gemini-4-argon-high`. The chair uses `COUNCIL_CHAIR_MODEL`, then the file's `chair`, then the resolved Claude member model. Run `node runner/council.mjs doctor` to see the resolved models.
 
 Exit codes: `0` verdict written (also when degraded), `2` no member answered, `3` the chair failed, `1` bad input.
 

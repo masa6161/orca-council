@@ -54,7 +54,7 @@ function doctor() {
     try { const r = resolveEngine(e); log(`  ${G_OK} ${e.padEnd(6)} ${[r.exe, ...r.prefix].join(' ')}`); found++ } catch (err) { log(`  ${G_NO} ${e.padEnd(6)} ${err.message}`) }
   }
   const m = engineModels()
-  log(`  models: claude=${m.claude} codex=${m.codex} agy=${m.agy} (override with COUNCIL_<ENGINE>_MODEL)`)
+  log(`  models: claude=${m.claude} codex=${m.codex} agy=${m.agy} chair=${m.chair}`)
   log(`  councils folder: ${defaultRoot()} (the project's .council folder, or COUNCIL_ROOT)`)
   log(found === 3 ? 'Ready.' : found ? `Ready with ${found} of 3 members (missing ones are skipped and the verdict says so).` : 'No member CLI found: install at least one, plus claude for the chair.')
   process.exit(found ? 0 : 1)
@@ -141,7 +141,7 @@ const S = {
   schema: 1, kind: 'council', slug, dir: dirName, mode, size: lite ? 'Lite' : 'Full', dryRun, pid: process.pid,
   state: 'running', phase: 'setup', startedAt: now(), updatedAt: now(), endedAt: null,
   members: engines.map(e => ({ engine: e, model: models[e], state: 'queued', startedAt: null, endedAt: null, seconds: null, error: null, limitHit: false, tldr: null })),
-  skipped, chair: { state: 'queued', startedAt: null, endedAt: null, seconds: null, error: null, tldr: null }, verdict: null, error: null
+  skipped, chair: { model: models.chair, state: 'queued', startedAt: null, endedAt: null, seconds: null, error: null, tldr: null }, verdict: null, error: null
 }
 function save() { S.updatedAt = now(); writeJsonAtomic(statusPath, S) }
 function tldrOf(text) {

@@ -7,6 +7,7 @@
 //                          kill the whole process tree at the deadline, then turn each output into an answer file
 import { spawn, spawnSync } from 'node:child_process'
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -15,14 +16,30 @@ export const FAKE_ENGINE = path.join(HERE, 'fake-engine.mjs')
 export const WIN = process.platform === 'win32'
 export const MEMBER_ENGINES = ['claude', 'codex', 'agy']
 
-// Default models. Override per engine with COUNCIL_CLAUDE_MODEL, COUNCIL_CODEX_MODEL, COUNCIL_AGY_MODEL
-// (any model id the CLI accepts: `claude --help`, `codex debug models`, `agy models`).
 export const DEFAULT_MODELS = { claude: 'opus', codex: 'gpt-6.1-sol', agy: 'gemini-4-argon-high' }
+
 export function engineModels(env = process.env) {
+  const file = WIN && env.APPDATA
+    ? path.join(env.APPDATA, 'orca-council', 'models.json')
+    : path.join(env.HOME || os.homedir(), '.council', 'models.json')
+  let config = {}
+  try {
+    config = JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''))
+    if (!config || typeof config !== 'object' || Array.isArray(config) ||
+        Object.keys(config).some(key => key !== 'chair' && !MEMBER_ENGINES.includes(key)) ||
+        Object.values(config).some(model => typeof model !== 'string' || !model.trim())) {
+      throw new Error('expected non-empty model IDs under claude, codex, agy or chair')
+    }
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw new Error(`Invalid model configuration (${file}): ${error.message}`)
+  }
+
+  const claude = env.COUNCIL_CLAUDE_MODEL || config.claude || DEFAULT_MODELS.claude
   return {
-    claude: env.COUNCIL_CLAUDE_MODEL || DEFAULT_MODELS.claude,
-    codex: env.COUNCIL_CODEX_MODEL || DEFAULT_MODELS.codex,
-    agy: env.COUNCIL_AGY_MODEL || DEFAULT_MODELS.agy
+    claude,
+    codex: env.COUNCIL_CODEX_MODEL || config.codex || DEFAULT_MODELS.codex,
+    agy: env.COUNCIL_AGY_MODEL || config.agy || DEFAULT_MODELS.agy,
+    chair: env.COUNCIL_CHAIR_MODEL || config.chair || claude
   }
 }
 
@@ -164,7 +181,7 @@ export function chairSpec(o) {
   const models = o.models || engineModels()
   const r = dryRun ? fake('chair') : {
     exe: resolveEngine('claude', o.env).exe,
-    args: ['-p', '--model', models.claude, '--effort', 'high', '--tools', '', '--system-prompt', CHAIR_SYSTEM_PROMPT,
+    args: ['-p', '--model', models.chair, '--effort', 'high', '--tools', '', '--system-prompt', CHAIR_SYSTEM_PROMPT,
       '--permission-mode', 'dontAsk', '--permission-prompts', 'none', '--restricted', '--strict-mcp-config', '--no-session-persistence', ...CLAUDE_STREAM]
   }
   return { name: 'chair', ...r, stdin: prompt, cwd: emptyDir, logDir, answerFile, timeoutSec, removeEnv: CLAUDE_HOST_ENV, kind: 'claudestream',
